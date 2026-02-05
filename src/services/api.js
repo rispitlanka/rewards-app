@@ -26,7 +26,11 @@ api.interceptors.request.use(
         const token = await getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+        } else {
+          console.warn('No token available for request to:', config.url);
         }
+      } else {
+        console.warn('Token getter not initialized for request to:', config.url);
       }
     } catch (error) {
       console.error('Error getting auth token:', error);
@@ -51,25 +55,37 @@ api.interceptors.response.use(
       
       switch (status) {
         case 401:
-          // Unauthorized - redirect to sign in
-          console.error('Unauthorized access');
-          // You can dispatch an action or redirect here
-          if (typeof window !== 'undefined') {
-            window.location.href = '/sign-in';
+          // Unauthorized - but check if it's a backend config issue
+          const errorMessage = data?.message || '';
+          const isBackendConfigError = errorMessage.includes('CLERK_SECRET_KEY') || 
+                                      errorMessage.includes('not properly configured');
+          
+          if (isBackendConfigError) {
+            // Don't redirect - this is a backend configuration issue, not an auth issue
+            console.error('Backend Clerk configuration error:', errorMessage);
+          } else {
+            // Only redirect if it's a genuine auth error (no token or invalid token)
+            console.error('Unauthorized access');
+            if (typeof window !== 'undefined' && window.location.pathname !== '/sign-in') {
+              window.location.replace('/sign-in');
+            }
           }
           break;
         case 403:
           // Forbidden - access denied
           console.error('Access forbidden');
-          if (typeof window !== 'undefined') {
-            window.location.href = '/unauthorized';
+          if (typeof window !== 'undefined' && window.location.pathname !== '/access-denied') {
+            window.location.replace('/access-denied');
           }
           break;
         case 404:
           console.error('Resource not found');
           break;
         case 500:
-          console.error('Server error');
+        case 502:
+        case 503:
+          // Server errors - could be database issues, don't redirect
+          console.error('Server error:', data?.message || 'Internal server error');
           break;
         default:
           console.error('Request failed:', data?.message || error.message);
@@ -126,22 +142,34 @@ export const createApiInstance = (tokenGetter) => {
         
         switch (status) {
           case 401:
-            console.error('Unauthorized access');
-            if (typeof window !== 'undefined') {
-              window.location.href = '/sign-in';
+            // Check if it's a backend config issue
+            const errorMsg = data?.message || '';
+            const isConfigError = errorMsg.includes('CLERK_SECRET_KEY') || 
+                                 errorMsg.includes('not properly configured');
+            
+            if (isConfigError) {
+              console.error('Backend Clerk configuration error:', errorMsg);
+            } else {
+              console.error('Unauthorized access');
+              if (typeof window !== 'undefined' && window.location.pathname !== '/sign-in') {
+                window.location.replace('/sign-in');
+              }
             }
             break;
           case 403:
             console.error('Access forbidden');
-            if (typeof window !== 'undefined') {
-              window.location.href = '/unauthorized';
+            if (typeof window !== 'undefined' && window.location.pathname !== '/access-denied') {
+              window.location.replace('/access-denied');
             }
             break;
           case 404:
             console.error('Resource not found');
             break;
           case 500:
-            console.error('Server error');
+          case 502:
+          case 503:
+            // Server errors - could be database issues, don't redirect
+            console.error('Server error:', data?.message || 'Internal server error');
             break;
           default:
             console.error('Request failed:', data?.message || error.message);

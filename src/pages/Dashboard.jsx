@@ -57,6 +57,27 @@ const Dashboard = () => {
     },
     refetchInterval: 5 * 60 * 1000, // Auto-refetch every 5 minutes
     staleTime: 2 * 60 * 1000, // Consider data stale after 2 minutes
+    retry: (failureCount, error) => {
+      // Don't retry on 401/403 errors (auth issues) or server errors (500, 502, 503)
+      // Also don't retry on database-related errors
+      const status = error?.response?.status;
+      const errorMessage = error?.response?.data?.message || '';
+      const isDatabaseError = errorMessage.includes('database') || 
+                              errorMessage.includes('Failed to create user') ||
+                              errorMessage.includes('Failed to');
+      
+      if (status === 401 || 
+          status === 403 || 
+          status === 500 || 
+          status === 502 || 
+          status === 503 ||
+          isDatabaseError) {
+        return false;
+      }
+      // Retry other errors up to 1 time
+      return failureCount < 1;
+    },
+    retryOnMount: false, // Don't retry when component remounts
   });
 
   // Calculate growth percentages (mock calculation - you can enhance this)
